@@ -1,6 +1,6 @@
 USE	SabaDB;
 DECLARE	@Object		SYSNAME		= N'base.tf_DecodeURL'
-	,	@Version	SYSNAME		= N'1.0.0'
+	,	@Version	SYSNAME		= N'1.0.1'
 	;
 EXECUTE	dbo.sp_MSR_InitInlineTableFunction @Object;
 EXECUTE	dbo.sp_MSR_SetVersion @Object, @Version;
@@ -19,22 +19,23 @@ AS
 	Parameters:
 		@string:			[REQUIRED]		- Input string that need to be decoded.
 
-	Version:	1.0.0
+	Version:	1.0.1
 	Revision:
+		- [1.0.1]	20221116@Billy		Migrate to SQL Server 2019
 		- [1.0.0]	20210416@Billy		Release base.tf_DecodeURL
 		- [0.0.1]	20210416@Billy		Initial - [Gitlab: #058]
 */
 RETURN (
 	WITH cte AS (
-		SELECT	sp.id, s.code, s.str, butf.lbyte, butf.ucode
-		FROM		base.f_SplitString(@string, '%', NULL) AS sp
+		SELECT	[id] = ROW_NUMBER() OVER(ORDER BY (SELECT NULL)), s.code, s.str, butf.lbyte, butf.ucode
+		FROM		STRING_SPLIT(CONCAT('%00', @string), '%') AS sp
 		CROSS APPLY	(
-			SELECT	[code]		= CASE sp.id WHEN 1 THEN NULL ELSE SUBSTRING(sp.val, 1, 2) END
-				,	[str]		= NULLIF(CASE sp.id WHEN 1 THEN val ELSE SUBSTRING(sp.val, 3, 2147483647) END, '')
+			SELECT	[code]	= NULLIF(NULLIF(SUBSTRING(sp.value, 1, 2), '00'), '')
+				,	[str]	= NULLIF(SUBSTRING(sp.value, 3, 2147483647), '')
 		) AS s
 		CROSS APPLY	(
-			SELECT	[hex]		= CONVERT(BINARY(1), s.code, 2)
-				,	[byte]		= CONVERT(INT, CONVERT(BINARY(1), s.code, 2))
+			SELECT	[hex]	= CONVERT(BINARY(1), s.code, 2)
+				,	[byte]	= CONVERT(INT, CONVERT(BINARY(1), s.code, 2))
 		) AS b
 		CROSS APPLY	(
 			SELECT	[lbyte]		= CASE
@@ -44,7 +45,7 @@ RETURN (
 									WHEN b.byte < 240 THEN 3
 									WHEN b.byte >= 240 THEN 4
 									ELSE NULL
-								  END
+								END
 				,	[ucode]		= CASE
 									WHEN b.byte < 128 THEN b.byte & 127
 									WHEN b.byte < 192 THEN b.byte & 63
@@ -52,42 +53,34 @@ RETURN (
 									WHEN b.byte < 240 THEN (b.byte & 15) * 4096
 									WHEN b.byte >= 240 THEN (b.byte & 7) * 262144
 									ELSE NULL
-								  END
+								END
 		) AS butf
 	)
-	SELECT	cc.str
-	FROM	(
-		SELECT	ISNULL(b4.calC, '') + COALESCE(cte.str, s.str, '')
-		FROM	cte
-		OUTER APPLY	(
-			SELECT	[str] = MAX(_.str)
-				,	[sumcode] = cte.ucode + SUM(_.ucode * POWER(2, _p.pos * 6))
-			FROM		cte AS _
-			CROSS APPLY	(
-				SELECT	[pos] = cte.lbyte + cte.id - _.id - 1
-			) AS _p
-			WHERE	_.id > cte.id
-				AND	_.id < cte.id + cte.lbyte
-				AND	_.lbyte IS NULL
-		) AS s
-		OUTER APPLY	(
-			SELECT	[scode] = cte.ucode + ISNULL(s.sumcode, 0)
-		) AS sc
+	SELECT	[str] = REPLACE(STRING_AGG(CONCAT(ISNULL(b4.calC, ''), COALESCE(cte.str, s.str, '')), N''), N'+', N' ')
+	FROM	cte
+	OUTER APPLY	(
+		SELECT	[str] = MAX(_.str)
+			,	[sumcode] = cte.ucode + SUM(_.ucode * POWER(2, _p.pos * 6))
+		FROM		cte AS _
 		CROSS APPLY	(
-			SELECT	[sH] = (((sc.scode - 65536) & 1047552) / 1024) + 55296
-				,	[sL] = ((sc.scode - 65536) & 1023) + 56320
-		) AS surrogate
-		CROSS APPLY	(
-			SELECT	[calC] = ISNULL(CAST(NCHAR(NULLIF(sc.scode, 0)) AS NVARCHAR(MAX)), NCHAR(surrogate.sH) + NCHAR(surrogate.sL)) --https://docs.microsoft.com/en-us/sql/t-sql/functions/nchar-transact-sql?view=sql-server-ver15
-		) AS b4
-		WHERE	cte.id = 1
-			OR	cte.lbyte > 0
-		FOR XML PATH ('')
-		,	TYPE
-	) AS ccx(xml)
+			SELECT	[pos] = cte.lbyte + cte.id - _.id - 1
+		) AS _p
+		WHERE	_.id > cte.id
+			AND	_.id < cte.id + cte.lbyte
+			AND	_.lbyte IS NULL
+	) AS s
+	OUTER APPLY	(
+		SELECT	[scode] = cte.ucode + ISNULL(s.sumcode, 0)
+	) AS sc
 	CROSS APPLY	(
-		SELECT	REPLACE(ccx.xml.value('.', 'NVARCHAR(MAX)'), '+', ' ')
-	) AS cc(str)
+		SELECT	[sH] = (((sc.scode - 65536) & 1047552) / 1024) + 55296
+			,	[sL] = ((sc.scode - 65536) & 1023) + 56320
+	) AS surrogate
+	CROSS APPLY	(
+		SELECT	[calC] = ISNULL(CAST(NCHAR(NULLIF(sc.scode, 0)) AS NVARCHAR(MAX)), NCHAR(surrogate.sH) + NCHAR(surrogate.sL)) --https://docs.microsoft.com/en-us/sql/t-sql/functions/nchar-transact-sql?view=sql-server-ver15
+	) AS b4
+	WHERE	cte.id = 1
+		OR	cte.lbyte > 0
 );
 GO
 
