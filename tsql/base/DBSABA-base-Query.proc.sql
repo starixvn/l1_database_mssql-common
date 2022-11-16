@@ -7,7 +7,7 @@ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 USE	SabaDB;
 GO
 DECLARE	@Object		SYSNAME
-	,	@Version	SYSNAME		= N'0.0.1'
+	,	@Version	SYSNAME		= N'0.0.2'
 	;
 
 SELECT	@Object		= N'base.Query'
@@ -29,8 +29,9 @@ AS
 	Creator:		20220919@Billy
 	Location:		DBSABA.SabaDB
 	Description:	Execute query on Luminet system
-	Version:		0.0.1
+	Version:		0.0.2
 	Revision:
+		- [0.0.2]	20221028@Billy		Using new BI Connector
 		- [0.0.1]	20220919@Billy		Initialize from base.ExecuteSabaQuery@1.3.4
 */
 BEGIN;
@@ -71,7 +72,7 @@ BEGIN;
 		/** PROD */
 		IF	@L = 1 AND @Type = 0 AND @Env = 1
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L1_SABABI;
+			EXECUTE	(@Query) AT [L1_PRO-BI];
 		END TRY BEGIN CATCH;
 			/** Not found linked server, try local linked server */
 			IF	ERROR_NUMBER() = 7202
@@ -82,7 +83,7 @@ BEGIN;
 
 		IF	@L = 2 AND @Type = 0 AND @Env = 1
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L2_SABABI;
+			EXECUTE	(@Query) AT [L2_PRO-BI];
 		END TRY BEGIN CATCH;
 			/** Not found linked server, try local linked server */
 			IF	ERROR_NUMBER() = 7202
@@ -91,55 +92,11 @@ BEGIN;
 			ELSE THROW;
 		END CATCH;
 
-		IF	@L = 3 AND @Type = 0 AND @Env = 1
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L3_SABABI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L3aBI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
-
-		/** PROD Archive */
-		IF	@L = 1 AND @Type = 1 AND @Env = 1
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L1_SABAARCBI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L1BI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
-
-		IF	@L = 2 AND @Type = 1 AND @Env = 1
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L2_SABAARCBI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L2BI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
-
-		IF	@L = 3 AND @Type = 1 AND @Env = 1
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L3_SABAARCBI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L3aBI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
 
 		/** UAT */
 		IF	@L = 1 AND @Type IN (0, 1) AND @Env = 2
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L1_SABAUATBI;
+			EXECUTE	(@Query) AT [L1_UAT-BI];
 		END TRY BEGIN CATCH;
 			/** Not found linked server, try local linked server */
 			IF	ERROR_NUMBER() = 7202
@@ -150,7 +107,7 @@ BEGIN;
 
 		IF	@L = 2 AND @Type IN (0, 1) AND @Env = 2
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L2_SABAUATBI;
+			EXECUTE	(@Query) AT [L2_UAT-BI];
 		END TRY BEGIN CATCH;
 			/** Not found linked server, try local linked server */
 			IF	ERROR_NUMBER() = 7202
@@ -159,22 +116,11 @@ BEGIN;
 			ELSE THROW;
 		END CATCH;
 
-		IF	@L = 3 AND @Type IN (0, 1) AND @Env = 2
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L3_SABAUATBI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L3bBI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
-
 
 		/** SIT */
 		IF	@L = 1 AND @Type IN (0, 1) AND @Env = 3
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L1_SABASITBI;
+			EXECUTE	(@Query) AT [L1_SIT-BI];
 		END TRY BEGIN CATCH;
 			/** Not found linked server, try local linked server */
 			IF	ERROR_NUMBER() = 7202
@@ -185,22 +131,12 @@ BEGIN;
 
 		IF	@L = 2 AND @Type IN (0, 1) AND @Env = 3
 		BEGIN TRY;
-			EXECUTE	(@Query) AT L2_SABASITBI;
+			EXECUTE	(@Query) AT [L2_SIT-BI];
 		END TRY BEGIN CATCH;
 			/** Pass control to outer error handler */
 			THROW;
 		END CATCH;
 
-		IF	@L = 3 AND @Type IN (0, 1) AND @Env = 3
-		BEGIN TRY;
-			EXECUTE	(@Query) AT L3_SABASITBI;
-		END TRY BEGIN CATCH;
-			/** Not found linked server, try local linked server */
-			IF	ERROR_NUMBER() = 7202
-				EXECUTE	(@Query) AT L3cBI;
-			/** Pass control to outer error handler */
-			ELSE THROW;
-		END CATCH;
 	END TRY BEGIN CATCH;
 		/** If error is retryable, retry */
 		IF	@Retry > 0

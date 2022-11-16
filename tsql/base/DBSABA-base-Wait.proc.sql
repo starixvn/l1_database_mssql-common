@@ -7,29 +7,32 @@ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 USE	SabaDB;
 GO
 DECLARE	@Object		SYSNAME		= N'base.Wait'
-	,	@Version	SYSNAME		= N'0.0.1'
+	,	@Version	SYSNAME		= N'0.0.2'
 	;
 EXECUTE	dbo.sp_MSR_InitProcedure @Object;
 EXECUTE	dbo.sp_MSR_SetVersion @Object, @Version;
 GO
 ALTER PROCEDURE	base.Wait
-					@sec			INT			= NULL
+					@Sec			INT			= NULL
 WITH ENCRYPTION
 AS
 /*
 	Creator:		20220919@Billy
 	Location:		DBSABA.SabaDB
 	Description:	Wait for random duration
-	Version:		0.0.1
+	Version:		0.0.2
 	Revision:
+		- [0.0.2]	20221114@Billy		Handle divide by 0
 		- [0.0.1]	20220919@Billy		Initialize
 */
 BEGIN;
 	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 	SET NOCOUNT ON;
 
+	DECLARE	@s	INT	= ISNULL(ABS(CASE WHEN @Sec = 0 THEN 1 ELSE @Sec END), 3);
+
 	BEGIN TRY;
-	DECLARE	@WaitFor	VARCHAR(16)		= CONCAT('00:00:0',  CAST(ABS(CHECKSUM(NEWID())) % ISNULL(ABS(@Sec), 3) AS CHAR(1)), '.', CAST(ABS(CHECKSUM(NEWID())) % 1000 AS CHAR(3)))
+	DECLARE	@WaitFor	VARCHAR(16)		= CONCAT('00:00:0',  CAST(ABS(CHECKSUM(NEWID())) % @s AS CHAR(1)), '.', CAST(ABS(CHECKSUM(NEWID())) % 1000 AS CHAR(3)))
 		;
 	WAITFOR DELAY @WaitFor;
 	END TRY BEGIN CATCH;
