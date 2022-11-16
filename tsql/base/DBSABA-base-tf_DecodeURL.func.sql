@@ -79,7 +79,7 @@ RETURN (
 	CROSS APPLY	(
 		SELECT	[calC] = ISNULL(CAST(NCHAR(NULLIF(sc.scode, 0)) AS NVARCHAR(MAX)), NCHAR(surrogate.sH) + NCHAR(surrogate.sL)) --https://docs.microsoft.com/en-us/sql/t-sql/functions/nchar-transact-sql?view=sql-server-ver15
 	) AS b4
-	WHERE	cte.id = 1
+	WHERE	cte.id = 2
 		OR	cte.lbyte > 0
 );
 GO
